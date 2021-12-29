@@ -1,11 +1,7 @@
 #include "InbetweenCmd.h"
 
-#include <math.h>
+#include <maya/MGlobal.h>
 #include <maya/MSelectionList.h>
-#include <maya/MItSelectionList.h>
-#include <maya/MPoint.h>
-#include <maya/MVector.h>
-#include <maya/MMatrix.h>
 #include <maya/MDagPath.h>
 #include <maya/MFnAnimCurve.h>
 #include <maya/MFnDagNode.h>
@@ -13,7 +9,6 @@
 #include <maya/MAnimCurveChange.h>
 #include <maya/MDGModifier.h>
 #include <maya/MArgDatabase.h>
-#include <maya/MFnAnimCurve.h>
 
 #include <maya/MAnimControl.h>
 #include <maya/MAnimUtil.h>
@@ -26,13 +21,11 @@ static const char* flagWeightNameLong("-weight");
 
 InbetweenCmd::InbetweenCmd()
 {
-    //mAnimCache = NULL;
 }
 
 InbetweenCmd::~InbetweenCmd()
 {
-    //delete mAnimCache;
-    mAnimCache.clear();
+    delete mAnimCache;
 }
 
 MSyntax InbetweenCmd::newSyntax()
@@ -58,10 +51,7 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
     MStatus status = MS::kSuccess;
 
     // Cache
-    //mAnimCache = NULL;
-    //mAnimCache = new MAnimCurveChange();
-    //mPlugs = new MPlugArray();
-    //mPlugValues = new MDoubleArray();*/
+    mAnimCache = new MAnimCurveChange();
 
     // Parse Args
     MArgParser argParser(syntax(), args);
@@ -94,13 +84,9 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
     {
         MObject node;
         status = objects.getDependNode(i, node);
-        
+
         MDagPath dag;
         objects.getDagPath(i, dag);
-        //MFnDependencyNode fnNode(dag.node());
-    
-        // Debug
-        //MGlobal::displayInfo(dag.fullPathName());
 
         // Get Animated Attributes
         MPlugArray plugs;
@@ -109,8 +95,6 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
         for (unsigned int p = 0; p < plugs.length(); ++p)
         {
             MPlug plug = plugs[p];
-
-            //MGlobal::displayInfo(plug.name());
             
             // Get Animation Curve
             MObjectArray animation;
@@ -131,13 +115,10 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
 
                 MFnAnimCurve animCurve(animObject);
 
-                if (animCurve.numKeys() == 0)
+                if (animCurve.numKeys() < 2)
                 {
                     continue;
                 }
-
-                // Create Cache
-                MAnimCurveChange* cache = new MAnimCurveChange();
 
                 // Get Closest Keyframe
                 unsigned int closeIndex = animCurve.findClosest(currentTime);
@@ -147,6 +128,9 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
                 int previousIndex = -1;
                 int nextIndex = -1;
 
+                int lastIndex = animCurve.numKeys() - 1;
+
+                // Current time is on top of previous or next key.
                 if (currentTime == closeTime)
                 {
                     // Previous
@@ -160,7 +144,7 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
                     }
 
                     // Next
-                    if (closeIndex < animCurve.numKeys() - 1)
+                    if (closeIndex < lastIndex)
                     {
                         nextIndex = closeIndex + 1;
                     }
@@ -171,7 +155,7 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
                 }
                 else
                 {
-                    // Still not found
+                    // Current time is outside key range.
                     // Previous
                     if (closeIndex == 0 && currentTime < closeTime)
                     {
@@ -179,60 +163,28 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
                         nextIndex = 0;
                     }
                     // Next
-                    else if (closeIndex == animCurve.numKeys() - 1 && currentTime > closeTime)
+                    else if (closeIndex == lastIndex && currentTime > closeTime)
                     {
                         nextIndex = -1;
-                        previousIndex = animCurve.numKeys() - 1;
+                        previousIndex = lastIndex;
                     }
                     else
                     {
-                        // Search Previous 2 & Next 2
+                        // Current Time is between two keyframes
                         if (previousIndex == -1 && nextIndex == -1)
                         {
-                            MDoubleArray distanceQuery;
-                            MIntArray indices;
-
-                            double previousMin = currentTime.value() - animCurve.time(0).value();
-                            double nextMin = currentTime.value() - animCurve.time(animCurve.numKeys()-1).value();
-
-                            for (int queryIndex = closeIndex - 2; queryIndex < closeIndex + 3; queryIndex++)
+                            // Previous
+                            if (closeTime < currentTime)
                             {
-                                if (0 <= queryIndex <= animCurve.numKeys() - 1)
-                                {
-                                    MTime queryTime = animCurve.time(queryIndex);
-                                    double distance = currentTime.value() - queryTime.value();
-
-                                    // Previous 
-                                    if (queryTime < currentTime)
-                                    {
-                                        if (distance < previousMin)
-                                        {
-                                            previousMin = distance;
-                                            previousIndex = queryIndex;
-                                        }
-
-                                    }
-                                    // Next
-                                    else if (queryTime > currentTime)
-                                    {
-                                        if (distance > nextMin)
-                                        {
-                                            nextMin = distance;
-                                            nextIndex = queryIndex;
-                                        }
-                                    }
-                                }
+                                previousIndex = closeIndex;
+                                nextIndex = closeIndex + 1;
                             }
-
-                            if (previousIndex == nextIndex)
+                            else if (closeTime > currentTime)
                             {
-                                nextIndex += 1;
+                                nextIndex = closeIndex;
+                                previousIndex = closeIndex - 1;
                             }
-                            else if (previousIndex > nextIndex)
-                            {
-                                previousIndex -= 1;
-                                nextIndex += 1;
-                            }
+                            
                         }
                     }
                 }
@@ -247,28 +199,30 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
                 {
                     continue;
                 }
-                else if (previousIndex == -1 || nextIndex == -1)
+                else if (previousIndex < 0 || previousIndex > lastIndex)
+                {
+                    continue;
+                }
+                else if (nextIndex < 0 || nextIndex > lastIndex)
                 {
                     continue;
                 }
 
-                // Set new Key
+                // Get new value from weight
                 double previousValue = animCurve.value(previousIndex);
                 double nextValue = animCurve.value(nextIndex);
                 double newValue = (nextValue - previousValue) * weight + previousValue;
-
-                //plug.setValue(newValue);
                 
+                // Set new key
                 if (currentTime == closeTime)
                 {
-                    animCurve.setValue(closeIndex, newValue, cache);
+                    animCurve.setValue(closeIndex, newValue, mAnimCache);
                 }
                 else
                 {
-                    animCurve.addKey(currentTime, newValue, MFnAnimCurve::kTangentGlobal, MFnAnimCurve::kTangentGlobal, cache);
+                    animCurve.addKeyframe(currentTime, newValue, mAnimCache);
                 }
 
-                mAnimCache.push_back(cache);
                 
                
             }
@@ -287,16 +241,9 @@ MStatus InbetweenCmd::redoIt()
     }
 
     return MS::kFailure;*/
-
-    MStatus status = MS::kSuccess;
-
-    redoIter d;
-    for (d = mAnimCache.begin(); (status == MS::kSuccess) && (d != mAnimCache.end()); d++)
-    {
-        status = (*d)->redoIt();
-    }
-
-    return status;
+    mAnimCache->redoIt();
+    //mDagMod.doIt();
+    return MS::kSuccess;
 }
 
 MStatus InbetweenCmd::undoIt()
@@ -308,16 +255,9 @@ MStatus InbetweenCmd::undoIt()
     }
 
     return MS::kFailure;*/
-
-    MStatus status = MS::kSuccess;
-
-    undoIter u;
-    for (u = mAnimCache.rbegin(); (status == MS::kSuccess) && (u != mAnimCache.rend()); u++)
-    {
-        status = (*u)->undoIt();
-    }
-
-    return status;
+    mAnimCache->undoIt();
+    //mDagMod.undoIt();
+    return MS::kSuccess;
 }
 
 
