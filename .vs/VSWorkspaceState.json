@@ -1,9 +1,8 @@
 {
   "ExpandedNodes": [
     "",
-    "\\cgcmake",
     "\\src"
   ],
-  "SelectedNode": "\\CMakeLists.txt",
+  "SelectedNode": "\\src\\InbetweenCmd.h",
   "PreviewInSolutionExplorer": false
 }
