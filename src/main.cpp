@@ -1,15 +1,32 @@
 ﻿#include <maya/MFnPlugin.h>
 
-#include "Inbetween.h"
+#include "InbetweenCmd.h"
 
 MStatus initializePlugin(MObject obj) {
     MFnPlugin plugin(obj, "Justin Tirado", "1.0", "Any");
-    plugin.registerCommand(Inbetween::name, Inbetween::creator);
+
+    MStatus status;
+    status = plugin.registerCommand(InbetweenCmd::name(), InbetweenCmd::creator, InbetweenCmd::newSyntax);
+
+    if (!status)
+    {
+        status.perror("Failed to register command.");
+        return status;
+    }
     return MS::kSuccess;
 }
 
 MStatus uninitializePlugin(MObject obj) {
     MFnPlugin plugin(obj);
-    plugin.deregisterCommand(Inbetween::name);
+
+    MStatus status;
+    status = plugin.deregisterCommand(InbetweenCmd::name());
+    
+    if (!status)
+    {
+        status.perror("Failed to unregister command.");
+        return status;
+    }
+
     return MS::kSuccess;
 }
