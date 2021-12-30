@@ -21,7 +21,6 @@ MStatus uninitializePlugin(MObject obj) {
 
     MStatus status;
     status = plugin.deregisterCommand(InbetweenCmd::name());
-    AnimationCurveCache::release();
     
     if (!status)
     {

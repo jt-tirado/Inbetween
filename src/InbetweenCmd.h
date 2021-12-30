@@ -13,49 +13,10 @@
 
 enum class ModifyType { Set, Add, Delete };
 
-class AnimationCache
-{
-	public:
-		struct AnimCurveData
-		{
-			MObject& animObject;
-			ModifyType type;
-			unsigned int index;
-			double value;
-			AnimCurveData(MObject& animObject, ModifyType type, int index = -1, double value = 0) : animObject(animObject), type(type), index(index), value(value) {}
-		};
-
-		AnimationCache() : mData() {}
-		~AnimationCache() { mData.clear(); }
-
-		void add(MObject& animObject, ModifyType type, unsigned int index = -1, double value = 0)
-		{
-			AnimationCache::AnimCurveData* data = new AnimationCache::AnimCurveData(animObject, type, index, value);
-			mData.push_back(data);
-		}
-
-		void clear() { mData.clear(); }
-		size_t length() { return mData.size(); }
-		std::vector<AnimCurveData*> data() { return mData; }
-
-		static AnimationCache* instance() 
-		{
-			if (!mInstance)
-			{
-				mInstance = new AnimationCache;
-			}
-
-			return mInstance;
-		}
-
-	private:
-		static AnimationCache* mInstance;
-		std::vector<AnimCurveData*> mData;
-};
-
 class AnimationCurveCache
 {
 	public:
+		AnimationCurveCache() : mData() {}
 		~AnimationCurveCache() { mData.clear(); }
 
 		void add(MAnimCurveChange* animCurveChange)
@@ -67,31 +28,7 @@ class AnimationCurveCache
 		size_t length() { return mData.size(); }
 		std::vector<MAnimCurveChange*> data() { return mData; }
 
-		static AnimationCurveCache* instance()
-		{
-			if (!mInstance)
-			{
-				mInstance = new AnimationCurveCache;
-			}
-
-			return mInstance;
-		}
-
-		static void release()
-		{
-			AnimationCurveCache::instance()->clear();
-
-			if (mInstance != NULL)
-			{
-				delete mInstance;
-				mInstance = NULL;
-			}
-		}
-
 	private:
-		AnimationCurveCache() : mData() {}
-
-		static AnimationCurveCache* mInstance;
 		std::vector<MAnimCurveChange*> mData;
 };
 
@@ -123,7 +60,7 @@ class InbetweenCmd : public MPxCommand
 		//std::vector<MAnimCurveChange*> mCache;
 
 		MDagPathArray mObjects;
-		//AnimationCache* mCache;
+		AnimationCurveCache* mCache = NULL;
 
 		MStatus parseArgs(const MArgList& args);
 };

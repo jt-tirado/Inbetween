@@ -19,8 +19,6 @@
 static const char* flagWeightName("-w");
 static const char* flagWeightNameLong("-weight");
 
-AnimationCurveCache* AnimationCurveCache::mInstance = NULL;
-
 InbetweenCmd::InbetweenCmd()
     : mObjects()
 {
@@ -237,8 +235,14 @@ MStatus InbetweenCmd::redoIt()
 
     MStatus status = MS::kSuccess;
 
-    AnimationCurveCache* mCache = AnimationCurveCache::instance();
-    mCache->clear();
+    if (mCache == NULL)
+    {
+        mCache = new AnimationCurveCache();
+    }
+    else
+    {
+        mCache->clear();
+    }
 
     for (unsigned int i = 0; i < mObjects.length(); ++i)
     {
@@ -354,8 +358,6 @@ MStatus InbetweenCmd::undoIt()
     //mDagMod.undoIt();
     //return mDGMod.undoIt();
 
-    AnimationCurveCache* mCache = AnimationCurveCache::instance();
-
     if (mCache->length() > 0)
     {
         for (unsigned int i = 0; i < mCache->length(); i++)
@@ -364,8 +366,6 @@ MStatus InbetweenCmd::undoIt()
             data->undoIt();
         }
     }
-
-    mCache->clear();
 
     return MS::kSuccess;
 }
