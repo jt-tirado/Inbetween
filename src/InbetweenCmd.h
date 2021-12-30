@@ -11,7 +11,6 @@
 
 #include <maya/MDagPathArray.h>
 
-enum class ModifyType { Set, Add, Delete };
 
 class AnimationCurveCache
 {
@@ -43,8 +42,8 @@ class InbetweenCmd : public MPxCommand
 		static int previousKeyIndex(MFnAnimCurve& animCurve, MTime& time);
 		static int nextKeyIndex(MFnAnimCurve& animCurve, MTime& time);
 
-		InbetweenCmd();
-		~InbetweenCmd();
+		InbetweenCmd::InbetweenCmd() : mObjects() {}
+		~InbetweenCmd() {}
 
 		bool isUndoable() const { return true; }
 		MStatus doIt(const MArgList& args);
@@ -54,10 +53,6 @@ class InbetweenCmd : public MPxCommand
 	private:
 		double mWeight;
 		MTime mCurrentTime;
-
-		//MDGModifier mDGMod;
-		//MAnimCurveChange* mAnimCache;
-		//std::vector<MAnimCurveChange*> mCache;
 
 		MDagPathArray mObjects;
 		AnimationCurveCache* mCache = NULL;

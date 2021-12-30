@@ -19,17 +19,6 @@
 static const char* flagWeightName("-w");
 static const char* flagWeightNameLong("-weight");
 
-InbetweenCmd::InbetweenCmd()
-    : mObjects()
-{
-    displayInfo("Init");
-}
-
-InbetweenCmd::~InbetweenCmd()
-{
-    //delete mCache;
-    displayInfo("Delete");
-}
 
 MSyntax InbetweenCmd::newSyntax()
 {
@@ -51,8 +40,6 @@ MSyntax InbetweenCmd::newSyntax()
 
 MStatus InbetweenCmd::parseArgs(const MArgList& args)
 {
-    displayInfo("ParseArgs");
-
     MStatus status = MS::kSuccess;
 
     MArgParser argParser(syntax(), args);
@@ -87,7 +74,6 @@ MStatus InbetweenCmd::parseArgs(const MArgList& args)
         {
             MDagPath dag;
             status = objects.getDagPath(i, dag);
-            //MStatError(status, "objects.getDependNode()");
             mObjects.append(dag);
         }
 
@@ -212,9 +198,6 @@ int InbetweenCmd::nextKeyIndex(MFnAnimCurve& animCurve, MTime& time)
 
 MStatus InbetweenCmd::doIt(const MArgList& args) 
 {
-    //
-    displayInfo("DoIt");
-
     MStatus status = MS::kSuccess;
 
     // Parse Args
@@ -231,8 +214,6 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
 
 MStatus InbetweenCmd::redoIt()
 {
-    displayInfo("RedoIt");
-
     MStatus status = MS::kSuccess;
 
     if (mCache == NULL)
@@ -288,11 +269,6 @@ MStatus InbetweenCmd::redoIt()
                 int previousIndex = previousKeyIndex(animCurveFn, mCurrentTime);
                 int nextIndex = nextKeyIndex(animCurveFn, mCurrentTime);
 
-                MString debug;
-                debug += previousIndex;
-                debug += nextIndex;
-                displayInfo(debug);
-
                 if (previousIndex == nextIndex)
                 {
                     continue;
@@ -308,34 +284,15 @@ MStatus InbetweenCmd::redoIt()
                 // Set new key
                 if (mCurrentTime == closeTime)
                 {
-                    //animCurve.setValue(closeIndex, newValue, mAnimCache);
-                    //plug.setValue(newValue);
-                    //mCache->add(animObject, ModifyType::Set, closeIndex, animCurveFn.value(closeIndex));
-                    //animCurveFn.setValue(closeIndex, newValue);
-
                     animCurveFn.setValue(closeIndex, newValue, animCache);
                     
                 }
                 else
                 {
-                    //animCurve.addKeyframe(currentTime, newValue, mAnimCache);
-                    //plug.setValue(newValue);
-                    //animCurveFn.addKeyframe(mCurrentTime, newValue);
-                    //unsigned int newIndex = animCurveFn.addKey(mCurrentTime, newValue);
-                    //mCache->add(animObject, ModifyType::Add, newIndex);
-
                     animCurveFn.addKeyframe(mCurrentTime, newValue, animCache);
                 }
 
                 mCache->add(animCache);
-
-                // Use Plug instead
-                //bool autoKey = MAnimControl::autoKeyMode();
-                //MAnimControl::setAutoKeyMode(true);
-
-                //plug.setValue(newValue);
-
-                //MAnimControl::setAutoKeyMode(autoKey);
             }
         }
     }
@@ -345,19 +302,6 @@ MStatus InbetweenCmd::redoIt()
 
 MStatus InbetweenCmd::undoIt()
 {
-    displayInfo("UndoIt");
-
-    /*if (mAnimCache != NULL)
-    {
-        return mAnimCache->undoIt();
-        
-    }
-
-    return MS::kFailure;*/
-    //mAnimCache->undoIt();
-    //mDagMod.undoIt();
-    //return mDGMod.undoIt();
-
     if (mCache->length() > 0)
     {
         for (unsigned int i = 0; i < mCache->length(); i++)
