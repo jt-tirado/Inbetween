@@ -19,13 +19,18 @@
 static const char* flagWeightName("-w");
 static const char* flagWeightNameLong("-weight");
 
+AnimationCurveCache* AnimationCurveCache::mInstance = NULL;
+
 InbetweenCmd::InbetweenCmd()
+    : mObjects()
 {
+    displayInfo("Init");
 }
 
 InbetweenCmd::~InbetweenCmd()
 {
-    delete mAnimCache;
+    //delete mCache;
+    displayInfo("Delete");
 }
 
 MSyntax InbetweenCmd::newSyntax()
@@ -46,23 +51,20 @@ MSyntax InbetweenCmd::newSyntax()
     return syntax;
 }
 
-MStatus InbetweenCmd::doIt(const MArgList& args) 
+MStatus InbetweenCmd::parseArgs(const MArgList& args)
 {
+    displayInfo("ParseArgs");
+
     MStatus status = MS::kSuccess;
 
-    // Cache
-    mAnimCache = new MAnimCurveChange();
-
-    // Parse Args
     MArgParser argParser(syntax(), args);
     MArgDatabase argData(syntax(), args, &status);
 
-    double weight;
-    MTime currentTime = MAnimControl::currentTime();
+    mCurrentTime = MAnimControl::currentTime();
 
     if (argParser.isFlagSet(flagWeightName))
     {
-        weight = argParser.flagArgumentDouble(flagWeightName, 0);
+        mWeight = argParser.flagArgumentDouble(flagWeightName, 0);
     }
     else
     {
@@ -71,22 +73,176 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
     }
 
     // Parse Objects
+    mObjects.clear();
+
     MSelectionList objects;
     status = argData.getObjects(objects);
-    
+
     if (!status)
     {
         MGlobal::displayError("No objects provided.");
         return MS::kFailure;
     }
-
-    for (unsigned int i = 0; i < objects.length(); ++i)
+    else
     {
-        MObject node;
-        status = objects.getDependNode(i, node);
+        for (unsigned int i = 0; i < objects.length(); ++i)
+        {
+            MDagPath dag;
+            status = objects.getDagPath(i, dag);
+            //MStatError(status, "objects.getDependNode()");
+            mObjects.append(dag);
+        }
 
-        MDagPath dag;
-        objects.getDagPath(i, dag);
+    }
+
+    return status;
+}
+
+int InbetweenCmd::previousKeyIndex(MFnAnimCurve& animCurve, MTime& time)
+{
+    int previousIndex = -1;
+
+    // Get Closest Keyframe
+    int closeIndex = animCurve.findClosest(time);
+    MTime closeTime = animCurve.time(closeIndex);
+    int lastIndex = animCurve.numKeys() - 1;
+
+    // Current time is on top of previous or next key.
+    if (time == closeTime)
+    {
+        // Previous
+        if (closeIndex > 0)
+        {
+            previousIndex = closeIndex - 1;
+        }
+        else
+        {
+            previousIndex = closeIndex;
+        }
+
+    }
+    else
+    {
+        // Current time is outside key range.
+        if (closeIndex == lastIndex && time > closeTime)
+        {
+            previousIndex = lastIndex;
+        }
+        else
+        {
+            // Current Time is between two keyframes
+            if (closeTime < time)
+            {
+                previousIndex = closeIndex;
+            }
+            else if (closeTime > time)
+            {
+                previousIndex = closeIndex - 1;
+            }
+
+        }
+    }
+
+    // Clamp
+    if (previousIndex < 0)
+    {
+        previousIndex = 0;
+    }
+    else if (previousIndex > lastIndex)
+    {
+        previousIndex = lastIndex;
+    }
+
+    return previousIndex;
+}
+
+int InbetweenCmd::nextKeyIndex(MFnAnimCurve& animCurve, MTime& time)
+{
+    int nextIndex = -1;
+
+    // Get Closest Keyframe
+    int closeIndex = animCurve.findClosest(time);
+    MTime closeTime = animCurve.time(closeIndex);
+    int lastIndex = animCurve.numKeys() - 1;
+
+    // Current time is on top of previous or next key.
+    if (time == closeTime)
+    {
+        // Next
+        if (closeIndex < lastIndex)
+        {
+            nextIndex = closeIndex + 1;
+        }
+        else
+        {
+            nextIndex = closeIndex;
+        }
+    }
+    else
+    {
+        // Current time is outside key range.
+        if (closeIndex == 0 && time < closeTime)
+        {
+            nextIndex = 0;
+        }
+        else
+        {
+            // Current Time is between two keyframes
+            if (closeTime < time)
+            {
+                nextIndex = closeIndex + 1;
+            }
+            else if (closeTime > time)
+            {
+                nextIndex = closeIndex;
+            }
+        }
+    }
+
+    // Clamp
+    if (nextIndex < 0)
+    {
+        nextIndex = 0;
+    }
+    else if (nextIndex > lastIndex)
+    {
+        nextIndex = lastIndex;
+    }
+
+    return nextIndex;
+}
+
+MStatus InbetweenCmd::doIt(const MArgList& args) 
+{
+    //
+    displayInfo("DoIt");
+
+    MStatus status = MS::kSuccess;
+
+    // Parse Args
+    status = parseArgs(args);
+
+    // Do It
+    if (status == MS::kSuccess)
+    {
+        status = redoIt();
+    }
+
+    return status;
+}
+
+MStatus InbetweenCmd::redoIt()
+{
+    displayInfo("RedoIt");
+
+    MStatus status = MS::kSuccess;
+
+    AnimationCurveCache* mCache = AnimationCurveCache::instance();
+    mCache->clear();
+
+    for (unsigned int i = 0; i < mObjects.length(); ++i)
+    {
+        MDagPath dag = mObjects[i];
 
         // Get Animated Attributes
         MPlugArray plugs;
@@ -95,7 +251,7 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
         for (unsigned int p = 0; p < plugs.length(); ++p)
         {
             MPlug plug = plugs[p];
-            
+
             // Get Animation Curve
             MObjectArray animation;
 
@@ -113,118 +269,69 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
                     continue;
                 }
 
-                MFnAnimCurve animCurve(animObject);
+                MFnAnimCurve animCurveFn(animObject);
 
-                if (animCurve.numKeys() < 2)
+                if (animCurveFn.numKeys() < 2)
                 {
                     continue;
                 }
 
                 // Get Closest Keyframe
-                unsigned int closeIndex = animCurve.findClosest(currentTime);
-                MTime closeTime = animCurve.time(closeIndex);
+                unsigned int closeIndex = animCurveFn.findClosest(mCurrentTime);
+                MTime closeTime = animCurveFn.time(closeIndex);
 
                 // Get Previous & Next 
-                int previousIndex = -1;
-                int nextIndex = -1;
+                int previousIndex = previousKeyIndex(animCurveFn, mCurrentTime);
+                int nextIndex = nextKeyIndex(animCurveFn, mCurrentTime);
 
-                int lastIndex = animCurve.numKeys() - 1;
-
-                // Current time is on top of previous or next key.
-                if (currentTime == closeTime)
-                {
-                    // Previous
-                    if (closeIndex > 0)
-                    {
-                        previousIndex = closeIndex - 1;
-                    }
-                    else
-                    {
-                        previousIndex = closeIndex;
-                    }
-
-                    // Next
-                    if (closeIndex < lastIndex)
-                    {
-                        nextIndex = closeIndex + 1;
-                    }
-                    else
-                    {
-                        nextIndex = closeIndex;
-                    }
-                }
-                else
-                {
-                    // Current time is outside key range.
-                    // Previous
-                    if (closeIndex == 0 && currentTime < closeTime)
-                    {
-                        previousIndex = -1;
-                        nextIndex = 0;
-                    }
-                    // Next
-                    else if (closeIndex == lastIndex && currentTime > closeTime)
-                    {
-                        nextIndex = -1;
-                        previousIndex = lastIndex;
-                    }
-                    else
-                    {
-                        // Current Time is between two keyframes
-                        if (previousIndex == -1 && nextIndex == -1)
-                        {
-                            // Previous
-                            if (closeTime < currentTime)
-                            {
-                                previousIndex = closeIndex;
-                                nextIndex = closeIndex + 1;
-                            }
-                            else if (closeTime > currentTime)
-                            {
-                                nextIndex = closeIndex;
-                                previousIndex = closeIndex - 1;
-                            }
-                            
-                        }
-                    }
-                }
-
-                // Debug
                 MString debug;
                 debug += previousIndex;
                 debug += nextIndex;
-                //MGlobal::displayInfo(debug);
+                displayInfo(debug);
 
                 if (previousIndex == nextIndex)
                 {
                     continue;
                 }
-                else if (previousIndex < 0 || previousIndex > lastIndex)
-                {
-                    continue;
-                }
-                else if (nextIndex < 0 || nextIndex > lastIndex)
-                {
-                    continue;
-                }
 
                 // Get new value from weight
-                double previousValue = animCurve.value(previousIndex);
-                double nextValue = animCurve.value(nextIndex);
-                double newValue = (nextValue - previousValue) * weight + previousValue;
-                
+                double previousValue = animCurveFn.value(previousIndex);
+                double nextValue = animCurveFn.value(nextIndex);
+                double newValue = (nextValue - previousValue) * mWeight + previousValue;
+
+                MAnimCurveChange* animCache = new MAnimCurveChange();
+
                 // Set new key
-                if (currentTime == closeTime)
+                if (mCurrentTime == closeTime)
                 {
-                    animCurve.setValue(closeIndex, newValue, mAnimCache);
+                    //animCurve.setValue(closeIndex, newValue, mAnimCache);
+                    //plug.setValue(newValue);
+                    //mCache->add(animObject, ModifyType::Set, closeIndex, animCurveFn.value(closeIndex));
+                    //animCurveFn.setValue(closeIndex, newValue);
+
+                    animCurveFn.setValue(closeIndex, newValue, animCache);
+                    
                 }
                 else
                 {
-                    animCurve.addKeyframe(currentTime, newValue, mAnimCache);
+                    //animCurve.addKeyframe(currentTime, newValue, mAnimCache);
+                    //plug.setValue(newValue);
+                    //animCurveFn.addKeyframe(mCurrentTime, newValue);
+                    //unsigned int newIndex = animCurveFn.addKey(mCurrentTime, newValue);
+                    //mCache->add(animObject, ModifyType::Add, newIndex);
+
+                    animCurveFn.addKeyframe(mCurrentTime, newValue, animCache);
                 }
 
-                
-               
+                mCache->add(animCache);
+
+                // Use Plug instead
+                //bool autoKey = MAnimControl::autoKeyMode();
+                //MAnimControl::setAutoKeyMode(true);
+
+                //plug.setValue(newValue);
+
+                //MAnimControl::setAutoKeyMode(autoKey);
             }
         }
     }
@@ -232,22 +339,10 @@ MStatus InbetweenCmd::doIt(const MArgList& args)
     return status;
 }
 
-MStatus InbetweenCmd::redoIt()
-{
-    /*if (mAnimCache != NULL)
-    {
-        return mAnimCache->redoIt();
-        
-    }
-
-    return MS::kFailure;*/
-    mAnimCache->redoIt();
-    //mDagMod.doIt();
-    return MS::kSuccess;
-}
-
 MStatus InbetweenCmd::undoIt()
 {
+    displayInfo("UndoIt");
+
     /*if (mAnimCache != NULL)
     {
         return mAnimCache->undoIt();
@@ -255,8 +350,23 @@ MStatus InbetweenCmd::undoIt()
     }
 
     return MS::kFailure;*/
-    mAnimCache->undoIt();
+    //mAnimCache->undoIt();
     //mDagMod.undoIt();
+    //return mDGMod.undoIt();
+
+    AnimationCurveCache* mCache = AnimationCurveCache::instance();
+
+    if (mCache->length() > 0)
+    {
+        for (unsigned int i = 0; i < mCache->length(); i++)
+        {
+            MAnimCurveChange* data = mCache->data()[i];
+            data->undoIt();
+        }
+    }
+
+    mCache->clear();
+
     return MS::kSuccess;
 }
 
