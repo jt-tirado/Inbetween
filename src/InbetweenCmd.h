@@ -52,6 +52,7 @@ class InbetweenCmd : public MPxCommand
 
 	private:
 		double mWeight;
+		bool mForce;
 		MTime mCurrentTime;
 
 		MDagPathArray mObjects;

@@ -18,6 +18,8 @@
 
 static const char* flagWeightName("-w");
 static const char* flagWeightNameLong("-weight");
+static const char* flagForceName("-f");
+static const char* flagForceNameLong("-force");
 
 
 MSyntax InbetweenCmd::newSyntax()
@@ -26,6 +28,9 @@ MSyntax InbetweenCmd::newSyntax()
 
     // Weight
     syntax.addFlag(flagWeightName, flagWeightNameLong, MSyntax::kDouble);
+
+    // Force
+    syntax.addFlag(flagForceName, flagForceNameLong, MSyntax::kBoolean);
 
     // Selection
     syntax.setObjectType(MSyntax::kSelectionList, 1);
@@ -47,14 +52,23 @@ MStatus InbetweenCmd::parseArgs(const MArgList& args)
 
     mCurrentTime = MAnimControl::currentTime();
 
+    // Weight
     if (argParser.isFlagSet(flagWeightName))
     {
         mWeight = argParser.flagArgumentDouble(flagWeightName, 0);
     }
     else
     {
-        MGlobal::displayError("No weight value provided.");
+        displayError("No weight value provided.");
         return MS::kFailure;
+    }
+
+    // Force
+    mForce = false;
+
+    if (argParser.isFlagSet(flagForceName))
+    {
+        mForce = argParser.flagArgumentBool(flagForceName, 0);
     }
 
     // Parse Objects
@@ -65,7 +79,7 @@ MStatus InbetweenCmd::parseArgs(const MArgList& args)
 
     if (!status)
     {
-        MGlobal::displayError("No objects provided.");
+        displayError("No objects provided.");
         return MS::kFailure;
     }
     else
@@ -269,11 +283,6 @@ MStatus InbetweenCmd::redoIt()
                 int previousIndex = previousKeyIndex(animCurveFn, mCurrentTime);
                 int nextIndex = nextKeyIndex(animCurveFn, mCurrentTime);
 
-                if (previousIndex == nextIndex)
-                {
-                    continue;
-                }
-
                 // Get new value from weight
                 double previousValue = animCurveFn.value(previousIndex);
                 double nextValue = animCurveFn.value(nextIndex);
@@ -282,17 +291,31 @@ MStatus InbetweenCmd::redoIt()
                 MAnimCurveChange* animCache = new MAnimCurveChange();
 
                 // Set new key
-                if (mCurrentTime == closeTime)
+                if (previousIndex == nextIndex)
                 {
-                    animCurveFn.setValue(closeIndex, newValue, animCache);
+                    if (mForce == true)
+                    {
+                        animCurveFn.addKeyframe(mCurrentTime, newValue, animCache);
+                        mCache->add(animCache);
+                    }
                     
                 }
                 else
                 {
-                    animCurveFn.addKeyframe(mCurrentTime, newValue, animCache);
+                    if (mCurrentTime == closeTime)
+                    {
+                        animCurveFn.setValue(closeIndex, newValue, animCache);
+
+                    }
+                    else
+                    {
+                        animCurveFn.addKeyframe(mCurrentTime, newValue, animCache);
+                    }
+
+                    mCache->add(animCache);
                 }
 
-                mCache->add(animCache);
+                
             }
         }
     }
