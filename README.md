@@ -16,3 +16,6 @@ inbetween -weight 0.5 -force 1 pCube1;
 import maya.cmds as cmds
 cmds.inbetween("pCube1", weight=0.5, force=True)
 ```
+
+# Credits
+- [CGCmake](https://github.com/chadmv/cgcmake)
