@@ -4,7 +4,7 @@ Maya 2022 Plug-in
 # Usage
 **Mel**
 ```
-inbetween -weight 0.5 -force true pCube1;
+inbetween -weight 0.5 -force 1 pCube1;
 ```
 
 **Python**
