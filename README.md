@@ -1,6 +1,8 @@
 # Inbetween
 Maya 2022 Plug-in
 
+Inbetween command is similar to a tool called Tween Machine but 10x faster. Basically, if you have an an animated object, create a key that favors the previous or the next keyframe values.
+
 # Usage
 **Mel**
 ```

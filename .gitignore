@@ -33,3 +33,12 @@
 
 # Build Directory
 out/
+
+# Visual C++ cache files
+ipch/
+*.aps
+*.ncb
+*.opendb
+*.opensdf
+*.sdf
+*.cachefile
